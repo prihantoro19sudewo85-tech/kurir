@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pengiriman Buah & Sayur</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Chart.js, SheetJS, html2pdf -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { brand: { dark: '#0f4c3a', primary: '#16a34a', light: '#e6f4ea', accent: '#f59e0b' } },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #adminMap { height: 300px; width: 100%; z-index: 10; border-radius: 0.5rem; }
+        #kurirMap { height: 100%; width: 100%; z-index: 10; }
+        .mobile-container { max-width: 414px; margin: 0 auto; height: 100vh; background: #fff; position: relative; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        @media (max-width: 768px) { .mobile-container { max-width: 100%; box-shadow: none; } }
+        #global-loader { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 99999; display: flex; flex-direction: column; items-center; justify-center; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen overflow-hidden">
+
+    <!-- Global Loader -->
+    <div id="global-loader">
+        <div class="w-16 h-16 border-4 border-brand-light border-t-brand-primary rounded-full animate-spin mb-4"></div>
+        <h2 class="text-xl font-bold text-brand-dark mb-1">Memuat Data...</h2>
+        <p id="loader-message" class="text-sm text-gray-500 text-center px-4">Menghubungkan ke Database</p>
+    </div>
+
+    <!-- VIEW: LOGIN KURIR -->
+    <div id="view-login-kurir" class="view-section h-screen hidden items-center justify-center bg-gray-800">
+        <div class="mobile-container rounded-3xl flex flex-col relative w-full border-4 border-gray-900 overflow-hidden bg-white">
+            <div class="relative h-60 w-full bg-white">
+                <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://res.cloudinary.com/div5frz9v/image/upload/v1789654318/Gemini_Generated_Image_ealjnxealjnxealj_t7pgwt.jpg');"></div>
+                <div class="absolute bottom-0 left-0 w-full h-20 bg-white" style="clip-path: ellipse(100% 100% at 50% 100%);"></div>
+            </div>
+            <div class="absolute top-36 left-1/2 transform -translate-x-1/2 w-[72px] h-[72px] bg-white rounded-full shadow-lg flex items-center justify-center z-10 border border-gray-50 p-1">
+                <img src="https://res.cloudinary.com/div5frz9v/image/upload/v1789654396/192x192_aooauf.png" class="w-full h-full object-contain">
+            </div>
+            <div class="flex-1 px-6 pt-12 pb-6 flex flex-col">
+                <div class="text-center mb-8">
+                    <h1 class="text-2xl font-black text-[#0f4c3a] tracking-tight font-serif">KirimBuahSayur</h1>
+                    <p class="text-[13px] font-medium text-[#0f4c3a] mt-0.5">Pengiriman Buah & Sayur</p>
+                </div>
+                <form id="loginFormKurir" onsubmit="handleLoginKurir(event)">
+                    <div class="mb-4 relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-regular fa-user text-[#0ba360]"></i></div>
+                        <input type="text" id="k-username" class="w-full pl-12 pr-4 py-3 bg-transparent border rounded-xl focus:border-[#0ba360] focus:ring-1 focus:ring-[#0ba360] text-sm" placeholder="Email Kurir" required>
+                    </div>
+                    <div class="mb-6 relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-lock text-[#0f4c3a] opacity-60"></i></div>
+                        <input type="password" id="k-password" class="w-full pl-12 pr-12 py-3 bg-transparent border rounded-xl focus:border-[#0ba360] focus:ring-1 focus:ring-[#0ba360] text-sm" placeholder="Password" required>
+                        <button type="button" onclick="togglePasswordVisibility('k-password', 'k-eye')" class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400"><i class="fa-regular fa-eye" id="k-eye"></i></button>
+                    </div>
+                    <p id="k-loginError" class="text-red-500 text-xs hidden mb-4 text-center bg-red-50 p-2 rounded-lg"></p>
+                    <button type="submit" class="w-full bg-[#0ba360] text-white font-bold py-3.5 rounded-xl active:scale-95 transition text-sm">Login</button>
+                </form>
+                <div class="flex-1"></div>
+                <div class="mt-8 flex flex-col items-center pb-2">
+                    <button onclick="switchView('view-login-admin')" class="text-[10px] text-gray-400 hover:text-gray-600 underline">Masuk sebagai Admin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW: LOGIN ADMIN -->
+    <div id="view-login-admin" class="view-section h-screen hidden items-center justify-center bg-gray-100 relative">
+        <div class="absolute top-0 left-0 w-full h-[40vh] bg-brand-dark rounded-b-[50px] shadow-lg"></div>
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md relative z-10 mx-4">
+            <div class="text-center mb-8">
+                <img src="https://res.cloudinary.com/div5frz9v/image/upload/v1789654396/192x192_aooauf.png" class="w-20 h-20 mx-auto object-contain mb-2">
+                <h1 class="text-2xl font-bold text-gray-900">Admin Portal</h1>
+            </div>
+            <form id="loginFormAdmin" onsubmit="handleLoginAdmin(event)">
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-gray-700 mb-1.5 uppercase">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center"><i class="fa-solid fa-user-gear text-gray-400"></i></div>
+                        <input type="text" id="a-username" class="w-full pl-10 pr-3 py-2.5 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-brand-primary" placeholder="Username (admin)" required>
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-700 mb-1.5 uppercase">Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center"><i class="fa-solid fa-lock text-gray-400"></i></div>
+                        <input type="password" id="a-password" class="w-full pl-10 pr-10 py-2.5 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-brand-primary" placeholder="Password" required>
+                        <button type="button" onclick="togglePasswordVisibility('a-password', 'a-eye')" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400"><i class="fa-regular fa-eye" id="a-eye"></i></button>
+                    </div>
+                </div>
+                <p id="a-loginError" class="text-red-500 text-xs hidden mb-4 text-center bg-red-50 p-2 rounded-lg"></p>
+                <button type="submit" class="w-full bg-brand-dark text-white font-bold py-3 rounded-lg active:scale-95 transition">Masuk Dashboard</button>
+                <div class="mt-6 pt-4 border-t border-gray-100 text-center">
+                    <button type="button" onclick="switchView('view-login-kurir')" class="text-sm text-brand-primary font-medium hover:underline">&larr; Kembali ke Aplikasi Kurir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- VIEW: ADMIN DASHBOARD -->
+    <div id="view-admin" class="view-section h-screen hidden bg-gray-100 overflow-hidden">
+        <aside class="w-64 bg-brand-dark text-white flex-shrink-0 flex flex-col hidden md:flex">
+            <div class="p-4 flex items-center gap-3 border-b border-white/10">
+                <img src="https://res.cloudinary.com/div5frz9v/image/upload/v1789654396/192x192_aooauf.png" class="w-8 h-8 rounded-full bg-white p-0.5 object-contain">
+                <span class="font-bold text-lg">Hanam Hanum</span>
+            </div>
+            <nav class="flex-1 py-4 space-y-1 overflow-y-auto">
+                <a href="#" id="nav-dashboard" onclick="navigateAdmin('dashboard')" class="admin-nav-link flex items-center gap-3 px-4 py-3 bg-brand-primary/20 border-l-4 border-brand-primary"><i class="fa-solid fa-house w-5"></i> Dashboard</a>
+                <a href="#" id="nav-pesanan" onclick="navigateAdmin('pesanan')" class="admin-nav-link flex items-center gap-3 px-4 py-3 text-gray-300 border-l-4 border-transparent hover:bg-white/5 hover:text-white"><i class="fa-solid fa-box w-5"></i> Pesanan</a>
+                <a href="#" id="nav-pengiriman" onclick="navigateAdmin('pengiriman')" class="admin-nav-link flex items-center gap-3 px-4 py-3 text-gray-300 border-l-4 border-transparent hover:bg-white/5 hover:text-white"><i class="fa-solid fa-truck w-5"></i> Pengiriman</a>
+                <a href="#" id="nav-kurir" onclick="navigateAdmin('kurir')" class="admin-nav-link flex items-center gap-3 px-4 py-3 text-gray-300 border-l-4 border-transparent hover:bg-white/5 hover:text-white"><i class="fa-solid fa-motorcycle w-5"></i> Kurir</a>
+                <a href="#" id="nav-master" onclick="navigateAdmin('master')" class="admin-nav-link flex items-center gap-3 px-4 py-3 text-gray-300 border-l-4 border-transparent hover:bg-white/5 hover:text-white"><i class="fa-solid fa-database w-5"></i> Master Data</a>
+            </nav>
+            <div class="p-4 border-t border-white/10">
+                <button onclick="logout()" class="flex items-center gap-3 text-gray-300 hover:text-white w-full"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-screen overflow-hidden">
+            <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 flex-shrink-0">
+                <button class="md:hidden text-gray-500"><i class="fa-solid fa-bars text-xl"></i></button>
+                <div class="flex items-center gap-4">
+                    <p class="hidden sm:block text-sm text-gray-500 mr-4 border-r pr-4" id="currentTime"></p>
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-brand-primary text-white flex items-center justify-center font-bold">A</div>
+                        <p class="text-sm font-semibold text-gray-700 hidden md:block">Administrator</p>
+                    </div>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-6 relative">
+                <!-- Sub-View: Dashboard -->
+                <div id="a-view-dashboard" class="admin-view-content block">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-brand-primary rounded-xl p-4 text-white flex items-center justify-between">
+                            <div><p class="text-sm">Total Pesanan</p><h3 class="text-3xl font-bold" id="stat-total">0</h3></div>
+                            <div class="text-3xl opacity-50"><i class="fa-solid fa-cart-shopping"></i></div>
+                        </div>
+                        <div class="bg-brand-accent rounded-xl p-4 text-white flex items-center justify-between">
+                            <div><p class="text-sm">Dlm Pengiriman</p><h3 class="text-3xl font-bold" id="stat-transit">0</h3></div>
+                            <div class="text-3xl opacity-50"><i class="fa-solid fa-truck"></i></div>
+                        </div>
+                        <div class="bg-blue-500 rounded-xl p-4 text-white flex items-center justify-between">
+                            <div><p class="text-sm">Selesai</p><h3 class="text-3xl font-bold" id="stat-completed">0</h3></div>
+                            <div class="text-3xl opacity-50"><i class="fa-solid fa-check-double"></i></div>
+                        </div>
+                        <div class="bg-purple-500 rounded-xl p-4 text-white flex items-center justify-between">
+                            <div><p class="text-sm">Total Kurir</p><h3 class="text-3xl font-bold" id="stat-couriers">0</h3></div>
+                            <div class="text-3xl opacity-50"><i class="fa-solid fa-users"></i></div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div class="p-4 border-b flex justify-between items-center">
+                            <h3 class="font-bold">Pesanan Terbaru</h3>
+                        </div>
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-gray-50 text-gray-500 border-b">
+                                <tr><th class="px-5 py-3">No</th><th class="px-5 py-3">Pelanggan</th><th class="px-5 py-3">Total</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Kurir</th></tr>
+                            </thead>
+                            <tbody id="adminOrderTable" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-View: Pesanan -->
+                <div id="a-view-pesanan" class="admin-view-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold">Manajemen Pesanan</h2>
+                        <button onclick="openModal('newOrderModal')" class="bg-brand-primary text-white px-4 py-2 rounded-lg font-bold">+ Pesanan Baru</button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-gray-50 border-b"><tr><th class="px-5 py-3">No</th><th class="px-5 py-3">Pelanggan</th><th class="px-5 py-3">Alamat</th><th class="px-5 py-3">Total</th><th class="px-5 py-3">Status</th></tr></thead>
+                            <tbody id="table-pesanan-full" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-View: Pengiriman -->
+                <div id="a-view-pengiriman" class="admin-view-content hidden">
+                    <h2 class="text-2xl font-bold mb-6">Status Pengiriman Aktif</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="card-pengiriman-full"></div>
+                </div>
+
+                <!-- Sub-View: Kurir -->
+                <div id="a-view-kurir" class="admin-view-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold">Manajemen Kurir</h2>
+                        <button onclick="openModal('newCourierModal')" class="bg-brand-primary text-white px-4 py-2 rounded-lg font-bold">+ Tambah Kurir</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="grid-kurir-full"></div>
+                </div>
+
+                <!-- Sub-View: Master Data -->
+                <div id="a-view-master" class="admin-view-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold">Master Data</h2>
+                    </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-xl border overflow-hidden xl:col-span-2">
+                            <div class="p-4 border-b bg-gray-50 flex justify-between items-center"><h3 class="font-bold">Pelanggan</h3><button onclick="openMasterModal('pelanggan')" class="text-xs bg-brand-primary text-white px-2 py-1 rounded">+ Tambah</button></div>
+                            <table class="w-full text-left text-sm"><thead class="bg-gray-50 border-b"><tr><th class="px-4 py-2">ID</th><th class="px-4 py-2">Nama</th><th class="px-4 py-2">Telepon</th><th class="px-4 py-2">Alamat</th><th class="px-4 py-2">Aksi</th></tr></thead><tbody id="master-pelanggan-tbody" class="divide-y divide-gray-100"></tbody></table>
+                        </div>
+                        <div class="bg-white rounded-xl border overflow-hidden">
+                            <div class="p-4 border-b bg-gray-50 flex justify-between items-center"><h3 class="font-bold">Buah</h3><button onclick="openMasterModal('buah')" class="text-xs bg-brand-accent text-white px-2 py-1 rounded">+ Tambah</button></div>
+                            <table class="w-full text-left text-sm"><thead class="bg-gray-50 border-b"><tr><th class="px-4 py-2">ID</th><th class="px-4 py-2">Nama</th><th class="px-4 py-2">Harga</th><th class="px-4 py-2">Stok</th><th class="px-4 py-2">Aksi</th></tr></thead><tbody id="master-buah-tbody" class="divide-y divide-gray-100"></tbody></table>
+                        </div>
+                        <div class="bg-white rounded-xl border overflow-hidden">
+                            <div class="p-4 border-b bg-gray-50 flex justify-between items-center"><h3 class="font-bold">Sayur</h3><button onclick="openMasterModal('sayur')" class="text-xs bg-green-600 text-white px-2 py-1 rounded">+ Tambah</button></div>
+                            <table class="w-full text-left text-sm"><thead class="bg-gray-50 border-b"><tr><th class="px-4 py-2">ID</th><th class="px-4 py-2">Nama</th><th class="px-4 py-2">Harga</th><th class="px-4 py-2">Stok</th><th class="px-4 py-2">Aksi</th></tr></thead><tbody id="master-sayur-tbody" class="divide-y divide-gray-100"></tbody></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- VIEW: KURIR APP (MOBILE) -->
+    <div id="view-kurir" class="view-section h-screen hidden bg-gray-800 items-center justify-center p-4">
+        <div class="mobile-container rounded-3xl flex flex-col relative w-full border-4 border-gray-900 overflow-hidden">
+            <div class="bg-brand-primary h-6 w-full flex justify-between items-center px-4 text-white text-[10px] z-50"><span>9:41</span><div class="flex gap-1.5"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></div></div>
+            
+            <div class="bg-brand-primary text-white p-4 rounded-b-3xl shadow-md z-40 relative flex justify-between items-start" id="kurir-header">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-white text-brand-primary flex items-center justify-center font-bold text-xl"><i class="fa-regular fa-user"></i></div>
+                    <div><p class="text-xs text-green-100">Halo,</p><h2 class="font-bold" id="active-kurir-name">Kurir</h2></div>
+                </div>
+                <button onclick="logout()" class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white"><i class="fa-solid fa-power-off"></i></button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto bg-gray-50 pb-20 relative" id="kurir-content">
+                <div id="k-view-home" class="p-4">
+                    <div class="bg-white rounded-2xl shadow-sm p-4 mb-4 border border-gray-100">
+                        <h3 class="font-bold text-sm border-b pb-2 mb-3">Tugas Anda Hari Ini</h3>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-gray-50 p-2 rounded-lg border"><p class="text-xl font-bold" id="k-total">0</p><p class="text-[10px] text-gray-500">Total</p></div>
+                            <div class="bg-green-50 p-2 rounded-lg border border-green-100"><p class="text-xl font-bold text-brand-primary" id="k-selesai">0</p><p class="text-[10px] text-brand-primary">Selesai</p></div>
+                            <div class="bg-orange-50 p-2 rounded-lg border border-orange-100"><p class="text-xl font-bold text-orange-500" id="k-sisa">0</p><p class="text-[10px] text-orange-500">Sisa</p></div>
+                        </div>
+                    </div>
+                    <button onclick="navigateKurir('list')" class="w-full bg-brand-primary text-white p-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition"><i class="fa-solid fa-list-check"></i> <span>Lihat Daftar Kiriman</span></button>
+                </div>
+                
+                <div id="k-view-list" class="hidden">
+                    <div class="p-4 flex items-center gap-3 bg-[#0f4c3a] text-white border-b sticky top-0"><button onclick="navigateKurir('home')" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><i class="fa-solid fa-arrow-left"></i></button><h3 class="font-bold">Daftar Kiriman</h3></div>
+                    <div class="p-4 space-y-3" id="kurirOrderList"></div>
+                </div>
+                
+                <div id="k-view-detail" class="hidden h-full flex flex-col bg-gray-50">
+                    <div class="p-4 flex items-center gap-3 bg-[#0f4c3a] text-white sticky top-0"><button onclick="navigateKurir('list')" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><i class="fa-solid fa-arrow-left"></i></button><h3 class="font-bold">Detail Pesanan</h3></div>
+                    <div class="flex-1 p-4" id="kurirOrderDetail"></div>
+                </div>
+            </div>
+
+            <div class="bg-white border-t border-gray-200 flex justify-around p-2 pb-5 z-40 relative" id="kurir-bottom-nav">
+                <button onclick="navigateKurir('home')" class="flex flex-col items-center p-2 text-brand-primary w-16"><i class="fa-solid fa-house mb-1"></i><span class="text-[10px]">Beranda</span></button>
+                <button onclick="navigateKurir('list')" class="flex flex-col items-center p-2 text-gray-400 w-16"><i class="fa-solid fa-clipboard-list mb-1"></i><span class="text-[10px]">Tugas</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS (ADMIN) -->
+    <!-- Modal New Order -->
+    <div id="newOrderModal" class="absolute inset-0 bg-black/60 z-[9999] hidden flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
+            <div class="p-4 bg-brand-dark text-white flex justify-between items-center"><h3 class="font-bold">Buat Pesanan Baru</h3><button onclick="closeModal('newOrderModal')"><i class="fa-solid fa-xmark text-xl"></i></button></div>
+            <form id="newOrderForm" onsubmit="submitNewOrder(event)" class="p-6 overflow-y-auto">
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Pilih Pelanggan</label><select id="no-customer" class="w-full border p-2 rounded text-sm" required></select></div>
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Total Harga (Rp)</label><input type="number" id="no-price" class="w-full border p-2 rounded text-sm" required></div>
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Berat Total</label><input type="text" id="no-weight" class="w-full border p-2 rounded text-sm" placeholder="Contoh: 2 kg" required></div>
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Tugaskan Kurir</label><select id="no-courier" class="w-full border p-2 rounded text-sm" required></select></div>
+                <button type="submit" id="btnSubmitOrder" class="w-full bg-brand-primary text-white font-bold py-3 rounded-xl mt-4">Simpan Pesanan</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Master Data -->
+    <div id="masterDataModal" class="absolute inset-0 bg-black/60 z-[9999] hidden flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-md flex flex-col overflow-hidden">
+            <div class="p-4 bg-brand-dark text-white flex justify-between items-center"><h3 class="font-bold" id="mdm-title">Form Master</h3><button onclick="closeModal('masterDataModal')"><i class="fa-solid fa-xmark text-xl"></i></button></div>
+            <form id="masterDataForm" onsubmit="submitMasterData(event)" class="p-6">
+                <input type="hidden" id="mdm-type"><input type="hidden" id="mdm-id">
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Nama</label><input type="text" id="mdm-name" class="w-full border p-2 rounded text-sm" required></div>
+                <div id="mdm-pelanggan-fields" class="hidden">
+                    <div class="mb-3"><label class="text-xs font-bold block mb-1">Telepon</label><input type="text" id="mdm-phone" class="w-full border p-2 rounded text-sm"></div>
+                    <div class="mb-3"><label class="text-xs font-bold block mb-1">Alamat Lengkap</label><textarea id="mdm-address" class="w-full border p-2 rounded text-sm"></textarea></div>
+                </div>
+                <div id="mdm-produk-fields" class="hidden grid grid-cols-2 gap-3">
+                    <div><label class="text-xs font-bold block mb-1">Harga (Rp)</label><input type="number" id="mdm-price" class="w-full border p-2 rounded text-sm"></div>
+                    <div><label class="text-xs font-bold block mb-1">Stok</label><input type="number" id="mdm-stock" class="w-full border p-2 rounded text-sm"></div>
+                </div>
+                <button type="submit" id="btnSubmitMaster" class="w-full bg-brand-primary text-white font-bold py-3 rounded-xl mt-4">Simpan Data</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Kurir Baru -->
+    <div id="newCourierModal" class="absolute inset-0 bg-black/60 z-[9999] hidden flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg flex flex-col overflow-hidden">
+            <div class="p-4 bg-brand-dark text-white flex justify-between items-center"><h3 class="font-bold">Tambah Kurir</h3><button onclick="closeModal('newCourierModal')"><i class="fa-solid fa-xmark text-xl"></i></button></div>
+            <form id="newCourierForm" onsubmit="submitNewCourier(event)" class="p-6">
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Nama Kurir</label><input type="text" id="nk-name" class="w-full border p-2 rounded text-sm" required></div>
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">Email / Username Login</label><input type="email" id="nk-email" class="w-full border p-2 rounded text-sm" required></div>
+                <div class="mb-3"><label class="text-xs font-bold block mb-1">No. Telepon</label><input type="text" id="nk-phone" class="w-full border p-2 rounded text-sm" required></div>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div><label class="text-xs font-bold block mb-1">Kendaraan</label><input type="text" id="nk-vehicle" class="w-full border p-2 rounded text-sm" placeholder="Merek Motor"></div>
+                    <div><label class="text-xs font-bold block mb-1">Nomor Polisi</label><input type="text" id="nk-plat" class="w-full border p-2 rounded text-sm" placeholder="B 1234 XX"></div>
+                </div>
+                <button type="submit" id="btnSubmitCourier" class="w-full bg-brand-primary text-white font-bold py-3 rounded-xl mt-4">Simpan Kurir</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. MASUKKAN URL GOOGLE APPS SCRIPT DI SINI
+        // ==========================================
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxKyT9Zz01WQK62Z3hD6wMwgBsd6I5yLxyAcyHqcXP2SKypVnW4BiVCbZYw_D3QnQ7mcA/exec"; 
+
+        // State Global Bersih (No Dummy Data)
+        let orders = []; 
+        let couriers = [];
+        let masterPelangganData = [];
+        let masterBuahData = [];
+        let masterSayurData = [];
+        let loggedInCourier = null;
+
+        // --- Core API Wrapper (Fetch ke GAS) ---
+        async function apiCall(action, payload = null) {
+            if (GAS_URL === "MASUKKAN_URL_WEB_APP_GAS_ANDA_DISINI") {
+                alert("SIlakan ganti tulisan MASUKKAN_URL_WEB_APP_GAS_ANDA_DISINI di kode HTML dengan URL Web App Apps Script Anda!");
+                document.getElementById('global-loader').classList.add('hidden');
+                throw new Error("GAS URL missing");
+            }
+            try {
+                let res;
+                if (payload === null) {
+                    res = await fetch(`${GAS_URL}?action=${action}`); // GET
+                } else {
+                    res = await fetch(GAS_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: action, ...payload }) // POST (tanpa custom header agar tidak kena blokir CORS)
+                    });
+                }
+                const json = await res.json();
+                return json;
+            } catch (err) {
+                console.error("API Call Error:", err);
+                alert("Terjadi kesalahan jaringan saat menghubungi database.");
+                return { success: false, error: err };
+            }
+        }
+
+        // --- Inisialisasi Aplikasi ---
+        window.onload = function() {
+            initApp();
+            setInterval(updateTime, 1000);
+        };
+
+        function updateTime() {
+            const timeEl = document.getElementById('currentTime');
+            if(timeEl) timeEl.innerText = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        }
+
+        function initApp() {
+            const loaderText = document.getElementById('loader-message');
+            
+            apiCall('getInitialData').then(res => {
+                if (res && res.success) {
+                    const data = res.data;
+                    orders = data.pesanan || [];
+                    couriers = data.kurir || [];
+                    masterPelangganData = data.pelanggan || [];
+                    masterBuahData = data.buah || [];
+                    masterSayurData = data.sayur || [];
+
+                    // Parse item JSON array
+                    orders.forEach(o => {
+                        if (typeof o.items === 'string' && o.items.trim() !== '') {
+                            try { o.items = JSON.parse(o.items); } catch(e) { o.items = []; }
+                        } else if (!o.items) { o.items = []; }
+                    });
+
+                    document.getElementById('global-loader').classList.add('hidden');
+                    switchView('view-login-kurir'); // Tampilan default saat pertama buka
+                } else {
+                    loaderText.innerText = "Gagal memuat data. Periksa URL GAS Anda.";
+                    loaderText.classList.add('text-red-500');
+                }
+            }).catch(() => {
+                loaderText.innerText = "Tidak dapat terhubung ke server.";
+                loaderText.classList.add('text-red-500');
+            });
+        }
+
+        // --- UI Utility ---
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(v => { v.classList.add('hidden'); v.classList.remove('flex'); });
+            const target = document.getElementById(viewId);
+            if(target) {
+                target.classList.remove('hidden');
+                if(viewId !== 'view-admin') target.classList.add('flex');
+                
+                if (viewId === 'view-admin') navigateAdmin('dashboard');
+                if (viewId === 'view-kurir') navigateKurir('home');
+            }
+        }
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+        function togglePasswordVisibility(inputId, iconId) {
+            const input = document.getElementById(inputId); const icon = document.getElementById(iconId);
+            if (input.type === 'password') { input.type = 'text'; icon.className = "fa-solid fa-eye-slash"; } 
+            else { input.type = 'password'; icon.className = "fa-regular fa-eye"; }
+        }
+
+        // --- Login Logic ---
+        function handleLoginAdmin(e) {
+            e.preventDefault();
+            const user = document.getElementById('a-username').value;
+            const error = document.getElementById('a-loginError');
+            if (user === 'admin') { error.classList.add('hidden'); switchView('view-admin'); } 
+            else { error.innerText = "Gunakan username 'admin'"; error.classList.remove('hidden'); }
+        }
+
+        function handleLoginKurir(e) {
+            e.preventDefault();
+            const user = document.getElementById('k-username').value.toLowerCase();
+            const error = document.getElementById('k-loginError');
+            
+            // Cari kurir di database
+            const found = couriers.find(c => c.email.toLowerCase() === user || c.phone === user);
+            if (found) {
+                loggedInCourier = found;
+                document.getElementById('active-kurir-name').innerText = found.name;
+                error.classList.add('hidden');
+                switchView('view-kurir');
+            } else {
+                error.innerText = "Email/No HP kurir tidak ditemukan di database admin.";
+                error.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            loggedInCourier = null;
+            document.getElementById('loginFormAdmin').reset();
+            document.getElementById('loginFormKurir').reset();
+            switchView('view-login-kurir');
+        }
+
+        // --- ADMIN APP LOGIC ---
+        function navigateAdmin(view) {
+            document.querySelectorAll('.admin-view-content').forEach(el => el.classList.add('hidden', 'block'));
+            document.getElementById(`a-view-${view}`).classList.remove('hidden');
+            document.getElementById(`a-view-${view}`).classList.add('block');
+            
+            if(view === 'dashboard') { updateAdminStats(); renderAdminTable(); }
+            if(view === 'pesanan') { renderAdminPesanan(); populatePesananDropdowns(); }
+            if(view === 'pengiriman') renderAdminPengiriman();
+            if(view === 'kurir') renderAdminKurir();
+            if(view === 'master') renderMasterData();
+        }
+
+        function updateAdminStats() {
+            document.getElementById('stat-total').innerText = orders.length;
+            document.getElementById('stat-transit').innerText = orders.filter(o => !['Menunggu', 'Selesai'].includes(o.status)).length;
+            document.getElementById('stat-completed').innerText = orders.filter(o => o.status === 'Selesai').length;
+            document.getElementById('stat-couriers').innerText = couriers.length;
+        }
+
+        function renderAdminTable() {
+            const tbody = document.getElementById('adminOrderTable');
+            tbody.innerHTML = '';
+            if(orders.length === 0) return tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Belum ada pesanan.</td></tr>';
+            
+            orders.slice().reverse().forEach(o => {
+                tbody.innerHTML += `<tr class="border-b"><td class="px-5 py-3">${o.id}</td><td class="px-5 py-3">${o.customer}</td><td class="px-5 py-3 font-bold">${o.total}</td><td class="px-5 py-3"><span class="bg-gray-100 text-xs px-2 py-1 rounded font-bold">${o.status}</span></td><td class="px-5 py-3 text-xs">${o.courier}</td></tr>`;
+            });
+        }
+        function renderAdminPesanan() {
+            const tbody = document.getElementById('table-pesanan-full');
+            tbody.innerHTML = '';
+            orders.slice().reverse().forEach(o => {
+                tbody.innerHTML += `<tr class="border-b"><td class="px-5 py-3 font-bold">${o.id}</td><td class="px-5 py-3">${o.customer}</td><td class="px-5 py-3 text-xs truncate max-w-[150px]">${o.address}</td><td class="px-5 py-3 font-bold">${o.total}</td><td class="px-5 py-3"><span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded">${o.status}</span></td></tr>`;
+            });
+        }
+        function renderAdminPengiriman() {
+            const c = document.getElementById('card-pengiriman-full'); c.innerHTML = '';
+            const active = orders.filter(o => !['Menunggu', 'Selesai'].includes(o.status));
+            if(active.length === 0) return c.innerHTML = '<p class="text-gray-500">Tidak ada pengiriman aktif.</p>';
+            active.forEach(o => {
+                c.innerHTML += `<div class="bg-white p-4 rounded-xl border shadow-sm"><div class="flex justify-between border-b pb-2 mb-2"><h4 class="font-bold">${o.id}</h4><span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">${o.status}</span></div><p class="text-sm">Tujuan: ${o.customer}</p><p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-motorcycle"></i> Kurir: ${o.courier}</p></div>`;
+            });
+        }
+        function renderAdminKurir() {
+            const c = document.getElementById('grid-kurir-full'); c.innerHTML = '';
+            if(couriers.length === 0) return c.innerHTML = '<p class="text-gray-500">Belum ada data kurir terdaftar.</p>';
+            couriers.forEach(k => {
+                c.innerHTML += `<div class="bg-white p-4 rounded-xl border shadow-sm text-center"><h4 class="font-bold text-lg">${k.name}</h4><p class="text-xs text-gray-500 mb-2">${k.email} | ${k.phone}</p><span class="text-xs bg-gray-100 px-2 py-1 rounded border">${k.vehicle} (${k.plat})</span></div>`;
+            });
+        }
+
+        // --- Admin Form / POST Action ---
+        function populatePesananDropdowns() {
+            const cSel = document.getElementById('no-customer'); cSel.innerHTML = '<option value="">Pilih Pelanggan...</option>';
+            masterPelangganData.forEach(p => cSel.innerHTML += `<option value="${p.name}">${p.name} - ${p.address.substring(0,15)}...</option>`);
+            
+            const kSel = document.getElementById('no-courier'); kSel.innerHTML = '<option value="">Pilih Kurir...</option>';
+            couriers.forEach(k => kSel.innerHTML += `<option value="${k.name}">${k.name}</option>`);
+        }
+
+        function submitNewOrder(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitOrder');
+            btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+
+            const custName = document.getElementById('no-customer').value;
+            const customerObj = masterPelangganData.find(p => p.name === custName) || { address: "-" };
+
+            const newOrder = {
+                id: "#ORD" + Math.floor(100000 + Math.random() * 900000),
+                date: new Date().toLocaleDateString('id-ID'),
+                customer: custName,
+                address: customerObj.address,
+                lat: 0, lng: 0, // No geocoding integration in clean version
+                total: "Rp " + parseInt(document.getElementById('no-price').value).toLocaleString('id-ID'),
+                totalWeight: document.getElementById('no-weight').value,
+                status: "Ditugaskan",
+                courier: document.getElementById('no-courier').value,
+                items: [] 
+            };
+
+            apiCall('saveOrder', { order: newOrder }).then(res => {
+                if(res.success) {
+                    orders.push(newOrder);
+                    closeModal('newOrderModal');
+                    document.getElementById('newOrderForm').reset();
+                    updateAdminStats(); renderAdminPesanan();
+                } else { alert("Gagal menyimpan pesanan!"); }
+                btn.innerHTML = 'Simpan Pesanan'; btn.disabled = false;
+            });
+        }
+
+        function submitNewCourier(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitCourier');
+            btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+
+            const newCourier = {
+                id: "KUR-" + Math.floor(1000 + Math.random() * 9000),
+                name: document.getElementById('nk-name').value,
+                email: document.getElementById('nk-email').value,
+                phone: document.getElementById('nk-phone').value,
+                vehicle: document.getElementById('nk-vehicle').value || "-",
+                plat: document.getElementById('nk-plat').value || "-",
+                ktp: "-", address: "-", branch: "Pusat", status: "Offline", rating: 5, img: "1", totalKirim: 0
+            };
+
+            apiCall('saveCourier', { courier: newCourier }).then(res => {
+                if(res.success) {
+                    couriers.push(newCourier);
+                    closeModal('newCourierModal');
+                    document.getElementById('newCourierForm').reset();
+                    renderAdminKurir();
+                }
+                btn.innerHTML = 'Simpan Kurir'; btn.disabled = false;
+            });
+        }
+
+        // --- Master Data POST Action ---
+        function openMasterModal(type, id = null) {
+            document.getElementById('masterDataForm').reset();
+            document.getElementById('mdm-type').value = type;
+            document.getElementById('mdm-id').value = id || '';
+            document.getElementById('mdm-title').innerText = id ? "Edit Data" : "Tambah Data";
+            
+            document.getElementById('mdm-pelanggan-fields').classList.add('hidden');
+            document.getElementById('mdm-produk-fields').classList.add('hidden');
+            if(type === 'pelanggan') document.getElementById('mdm-pelanggan-fields').classList.remove('hidden');
+            else document.getElementById('mdm-produk-fields').classList.remove('hidden');
+
+            openModal('masterDataModal');
+        }
+
+        function submitMasterData(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitMaster');
+            btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+
+            const type = document.getElementById('mdm-type').value;
+            const dataObj = {
+                id: document.getElementById('mdm-id').value || (type.charAt(0).toUpperCase() + "-" + Math.floor(Math.random()*1000)),
+                name: document.getElementById('mdm-name').value,
+                phone: document.getElementById('mdm-phone').value,
+                address: document.getElementById('mdm-address').value,
+                price: document.getElementById('mdm-price').value,
+                stock: document.getElementById('mdm-stock').value
+            };
+
+            apiCall('saveMasterData', { type, dataObj }).then(res => {
+                if(res.success) {
+                    // Update array locally
+                    let targetArr = type === 'pelanggan' ? masterPelangganData : (type === 'buah' ? masterBuahData : masterSayurData);
+                    let existingIdx = targetArr.findIndex(x => x.id === dataObj.id);
+                    if(existingIdx > -1) targetArr[existingIdx] = dataObj;
+                    else targetArr.push(dataObj);
+                    
+                    closeModal('masterDataModal');
+                    renderMasterData();
+                }
+                btn.innerHTML = 'Simpan Data'; btn.disabled = false;
+            });
+        }
+
+        function deleteMaster(type, id) {
+            if(!confirm("Yakin ingin menghapus data ini?")) return;
+            apiCall('deleteMasterData', { type, id }).then(res => {
+                if(res.success) {
+                    if(type==='pelanggan') masterPelangganData = masterPelangganData.filter(d=>d.id!==id);
+                    if(type==='buah') masterBuahData = masterBuahData.filter(d=>d.id!==id);
+                    if(type==='sayur') masterSayurData = masterSayurData.filter(d=>d.id!==id);
+                    renderMasterData();
+                }
+            });
+        }
+
+        function renderMasterData() {
+            const r = (arr, id, isCust) => {
+                const b = document.getElementById(id); b.innerHTML = '';
+                arr.forEach(d => {
+                    b.innerHTML += `<tr class="border-b">
+                        <td class="px-4 py-2">${d.id}</td><td class="px-4 py-2">${d.name}</td>
+                        <td class="px-4 py-2">${isCust ? d.phone : d.price}</td><td class="px-4 py-2 text-xs truncate max-w-[150px]">${isCust ? d.address : d.stock}</td>
+                        <td class="px-4 py-2"><button onclick="deleteMaster('${isCust?'pelanggan':(id.includes('buah')?'buah':'sayur')}','${d.id}')" class="text-red-500 text-xs"><i class="fa-solid fa-trash"></i></button></td>
+                    </tr>`;
+                });
+            };
+            r(masterPelangganData, 'master-pelanggan-tbody', true);
+            r(masterBuahData, 'master-buah-tbody', false);
+            r(masterSayurData, 'master-sayur-tbody', false);
+        }
+
+        // --- KURIR APP LOGIC ---
+        function navigateKurir(view) {
+            ['home', 'list', 'detail'].forEach(v => document.getElementById(`k-view-${v}`).classList.add('hidden'));
+            document.getElementById(`k-view-${view}`).classList.remove('hidden');
+            if (view === 'home') {
+                const myOrders = orders.filter(o => o.courier === loggedInCourier.name);
+                const selesai = myOrders.filter(o => o.status === 'Selesai').length;
+                document.getElementById('k-total').innerText = myOrders.length;
+                document.getElementById('k-selesai').innerText = selesai;
+                document.getElementById('k-sisa').innerText = myOrders.length - selesai;
+            } else if (view === 'list') {
+                const list = document.getElementById('kurirOrderList'); list.innerHTML = '';
+                const myOrders = orders.filter(o => o.courier === loggedInCourier.name);
+                if(myOrders.length === 0) list.innerHTML = '<p class="text-center text-gray-300 mt-10">Belum ada kiriman untuk Anda hari ini.</p>';
+                myOrders.forEach(o => {
+                    list.innerHTML += `<div class="bg-white rounded-xl shadow-sm border p-4 mb-3 active:scale-95 transition" onclick="openOrderDetail('${o.id}')">
+                        <div class="flex justify-between mb-2"><h4 class="font-bold">${o.id}</h4><span class="text-xs font-bold bg-gray-100 px-2 rounded">${o.status}</span></div>
+                        <p class="text-xs text-gray-600">${o.customer} - ${o.address}</p>
+                    </div>`;
+                });
+            }
+        }
+
+        function openOrderDetail(orderId) {
+            const o = orders.find(x => x.id === orderId);
+            const container = document.getElementById('kurirOrderDetail');
+            
+            let btnAction = '';
+            if (o.status !== 'Selesai') {
+                let nextStatus = o.status === 'Ditugaskan' ? 'Diambil Kurir' : (o.status === 'Diambil Kurir' ? 'Dalam Perjalanan' : 'Selesai');
+                let btnText = o.status === 'Ditugaskan' ? 'Ambil Pesanan' : (o.status === 'Diambil Kurir' ? 'Mulai Mengantar' : 'Selesaikan Pesanan');
+                
+                btnAction = `<button onclick="updateKurirStatus('${o.id}', '${nextStatus}')" class="w-full bg-brand-primary text-white font-bold py-3.5 rounded-xl mt-6 active:scale-95 transition shadow-lg">${btnText}</button>`;
+            } else {
+                btnAction = `<button disabled class="w-full bg-gray-200 text-gray-500 font-bold py-3.5 rounded-xl mt-6">Pesanan Telah Selesai</button>`;
+            }
+
+            container.innerHTML = `
+                <div class="bg-white rounded-xl p-5 border mb-4">
+                    <h2 class="text-xl font-bold">${o.id}</h2>
+                    <p class="text-sm font-bold text-brand-primary mt-1">${o.status}</p>
+                    <p class="text-lg font-bold mt-3">${o.total}</p>
+                </div>
+                <div class="bg-white rounded-xl p-5 border">
+                    <h4 class="text-xs text-gray-400 font-bold uppercase mb-2">Tujuan Pengiriman</h4>
+                    <p class="font-bold">${o.customer}</p>
+                    <p class="text-sm text-gray-600 mt-1">${o.address}</p>
+                </div>
+                ${btnAction}
+            `;
+            navigateKurir('detail');
+        }
+
+        function updateKurirStatus(orderId, newStatus) {
+            apiCall('updateOrderStatus', { orderId, newStatus }).then(res => {
+                if(res.success) {
+                    const o = orders.find(x => x.id === orderId);
+                    if(o) o.status = newStatus;
+                    
+                    if(newStatus === 'Selesai') {
+                        alert("Pengiriman Berhasil Diselesaikan!");
+                        navigateKurir('home');
+                    } else {
+                        openOrderDetail(orderId); // Refresh tampilan detail
+                    }
+                } else { alert("Gagal mengupdate status ke server."); }
+            });
+        }
+    </script>
+</body>
+</html>
