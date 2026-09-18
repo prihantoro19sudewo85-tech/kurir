@@ -45,7 +45,7 @@
     <div id="global-loader">
         <div class="w-16 h-16 border-4 border-brand-light border-t-brand-primary rounded-full animate-spin mb-4"></div>
         <h2 class="text-xl font-bold text-brand-dark mb-1">Memuat Data...</h2>
-        <p id="loader-message" class="text-sm text-gray-500 text-center px-4">Menghubungkan ke Database</p>
+        <p id="loader-message" class="text-sm text-gray-500 text-center px-4 max-w-md">Menghubungkan ke Database</p>
     </div>
 
     <!-- VIEW: LOGIN KURIR -->
@@ -346,38 +346,34 @@
         let masterSayurData = [];
         let loggedInCourier = null;
 
-        // --- Core API Wrapper (Revisi: Menangani CORS dengan benar) ---
+        // --- Core API Wrapper ---
         async function apiCall(action, payload = null) {
             try {
-                let res;
-                if (payload === null) {
-                    // Memaksa GET method dengan redirect follow (wajib untuk GAS)
-                    res = await fetch(`${GAS_URL}?action=${action}`, {
-                        method: "GET",
-                        redirect: "follow"
-                    });
+                let url = `${GAS_URL}?action=${action}`;
+                let options = { redirect: "follow" };
+                
+                if (payload) {
+                    options.method = 'POST';
+                    options.headers = { "Content-Type": "text/plain;charset=utf-8" };
+                    options.body = JSON.stringify({ action: action, ...payload });
                 } else {
-                    // Memaksa POST method dengan header text/plain (menghindari block CORS Preflight)
-                    res = await fetch(GAS_URL, {
-                        method: 'POST',
-                        headers: {
-                            "Content-Type": "text/plain;charset=utf-8"
-                        },
-                        body: JSON.stringify({ action: action, ...payload }),
-                        redirect: "follow"
-                    });
+                    options.method = 'GET';
                 }
                 
-                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-                const json = await res.json();
-                return json;
+                const res = await fetch(url, options);
+                const text = await res.text(); // Ambil sebagai teks dulu agar error non-JSON terlihat
+                
+                try {
+                    return JSON.parse(text);
+                } catch(e) {
+                    throw new Error("Gagal mengurai respons. Server membalas: " + text.substring(0, 100) + "...");
+                }
             } catch (err) {
                 console.error("API Call Error:", err);
                 throw err; 
             }
         }
 
-        // --- Inisialisasi Aplikasi ---
         window.onload = function() {
             initApp();
             setInterval(updateTime, 1000);
@@ -400,7 +396,6 @@
                     masterBuahData = data.buah || [];
                     masterSayurData = data.sayur || [];
 
-                    // Parse item JSON array
                     orders.forEach(o => {
                         if (typeof o.items === 'string' && o.items.trim() !== '') {
                             try { o.items = JSON.parse(o.items); } catch(e) { o.items = []; }
@@ -410,17 +405,13 @@
                     document.getElementById('global-loader').classList.add('hidden');
                     switchView('view-login-kurir');
                 } else {
-                    loaderText.innerText = "Gagal memuat struktur data. Cek kode GAS Anda.";
-                    loaderText.classList.add('text-red-500');
+                    loaderText.innerHTML = `<span class="text-red-500 font-bold">ERROR SERVER:</span><br>${res.error}`;
                 }
             }).catch((err) => {
-                // Memberikan pesan error yang lebih jelas di UI
-                loaderText.innerHTML = "Akses Ditolak.<br>Pastikan Deployment Google Script diatur ke <b>'Siapa saja' (Anyone)</b>.";
-                loaderText.classList.add('text-red-500');
+                loaderText.innerHTML = `<span class="text-red-500 font-bold">KONEKSI GAGAL:</span><br>${err.message}`;
             });
         }
 
-        // --- UI Utility ---
         function switchView(viewId) {
             document.querySelectorAll('.view-section').forEach(v => { v.classList.add('hidden'); v.classList.remove('flex'); });
             const target = document.getElementById(viewId);
@@ -440,7 +431,6 @@
             else { input.type = 'password'; icon.className = "fa-regular fa-eye"; }
         }
 
-        // --- Login Logic ---
         function handleLoginAdmin(e) {
             e.preventDefault();
             const user = document.getElementById('a-username').value;
@@ -473,7 +463,6 @@
             switchView('view-login-kurir');
         }
 
-        // --- ADMIN APP LOGIC ---
         function navigateAdmin(view) {
             document.querySelectorAll('.admin-view-content').forEach(el => el.classList.add('hidden', 'block'));
             document.getElementById(`a-view-${view}`).classList.remove('hidden');
@@ -525,7 +514,6 @@
             });
         }
 
-        // --- Admin Form / POST Action ---
         function populatePesananDropdowns() {
             const cSel = document.getElementById('no-customer'); cSel.innerHTML = '<option value="">Pilih Pelanggan...</option>';
             masterPelangganData.forEach(p => cSel.innerHTML += `<option value="${p.name}">${p.name} - ${p.address.substring(0,15)}...</option>`);
@@ -592,7 +580,6 @@
             }).catch(()=> { alert("Terjadi kesalahan jaringan."); btn.innerHTML = 'Simpan Kurir'; btn.disabled = false; });
         }
 
-        // --- Master Data POST Action ---
         function openMasterModal(type, id = null) {
             document.getElementById('masterDataForm').reset();
             document.getElementById('mdm-type').value = type;
@@ -664,7 +651,6 @@
             r(masterSayurData, 'master-sayur-tbody', false);
         }
 
-        // --- KURIR APP LOGIC ---
         function navigateKurir(view) {
             ['home', 'list', 'detail'].forEach(v => document.getElementById(`k-view-${v}`).classList.add('hidden'));
             document.getElementById(`k-view-${view}`).classList.remove('hidden');
